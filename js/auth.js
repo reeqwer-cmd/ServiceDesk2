@@ -33,23 +33,45 @@ class AuthService {
         }
     }
 
-    login(username, password) {
-        const users = JSON.parse(localStorage.getItem('users') || '[]');
-        const user = users.find(u => 
-            u.username.toLowerCase() === username.toLowerCase() && 
-            u.password === password && 
-            u.isActive === true
-        );
-        
-        if (user) {
-            this.currentUser = user;
-            localStorage.setItem('currentUser', JSON.stringify(user));
-            console.log('✅ Успешный вход:', user.name, `(${user.role})`);
-            return true;
+    async login(username, password) {
+        try {
+            // Пытаемся использовать SQL базу
+            if (window.sqlDB && window.sqlDB.db) {
+                const user = await window.sqlDB.getUserByUsername(username);
+                
+                if (user && user.password === password && user.is_active === 1) {
+                    this.currentUser = user;
+                    localStorage.setItem('currentUser', JSON.stringify(user));
+                    
+                    // Обновляем время последнего входа
+                    await window.sqlDB.updateUser(user.id, {
+                        last_login: new Date().toISOString()
+                    });
+                    
+                    console.log('✅ Успешный вход через SQL:', user.name);
+                    return true;
+                }
+            }
+            
+            // Fallback на localStorage
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const user = users.find(u => 
+                u.username.toLowerCase() === username.toLowerCase() && 
+                u.password === password && 
+                u.isActive === true
+            );
+            
+            if (user) {
+                this.currentUser = user;
+                localStorage.setItem('currentUser', JSON.stringify(user));
+                return true;
+            }
+            
+            return false;
+        } catch (error) {
+            console.error('Ошибка входа:', error);
+            return false;
         }
-        
-        console.log('❌ Ошибка входа для пользователя:', username);
-        return false;
     }
 
     logout() {
@@ -90,60 +112,83 @@ class AuthService {
     }
 
     // User management methods
-    createUser(userData) {
+    async createUser(userData) {
         if (!this.hasPermission('create_users')) {
             throw new Error('Недостаточно прав для создания пользователей');
         }
 
-        const users = JSON.parse(localStorage.getItem('users') || '[]');
-        
-        if (users.find(u => u.username.toLowerCase() === userData.username.toLowerCase())) {
-            throw new Error('Пользователь с таким логином уже существует');
+        try {
+            // Пытаемся использовать SQL базу
+            if (window.sqlDB && window.sqlDB.db) {
+                userData.createdBy = this.currentUser.username;
+                return await window.sqlDB.createUser(userData);
+            }
+            
+            // Fallback на localStorage
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            
+            if (users.find(u => u.username.toLowerCase() === userData.username.toLowerCase())) {
+                throw new Error('Пользователь с таким логином уже существует');
+            }
+
+            const newUser = {
+                id: Date.now(),
+                username: userData.username,
+                password: userData.password,
+                name: userData.name,
+                email: userData.email,
+                department: userData.department,
+                role: userData.role || 'user',
+                created: new Date().toISOString(),
+                isActive: true,
+                permissions: this.getPermissionsByRole(userData.role),
+                createdBy: this.currentUser.username
+            };
+
+            users.push(newUser);
+            localStorage.setItem('users', JSON.stringify(users));
+            
+            return newUser;
+        } catch (error) {
+            console.error('Ошибка создания пользователя:', error);
+            throw error;
         }
-
-        const newUser = {
-            id: Date.now(),
-            username: userData.username,
-            password: userData.password,
-            name: userData.name,
-            email: userData.email,
-            department: userData.department,
-            role: userData.role || 'user',
-            created: new Date().toISOString(),
-            isActive: true,
-            permissions: this.getPermissionsByRole(userData.role),
-            createdBy: this.currentUser.username
-        };
-
-        users.push(newUser);
-        localStorage.setItem('users', JSON.stringify(users));
-        
-        return newUser;
     }
 
-    updateUser(userId, userData) {
+    async updateUser(userId, userData) {
         if (!this.hasPermission('edit_users')) {
             throw new Error('Недостаточно прав для редактирования пользователей');
         }
 
-        const users = JSON.parse(localStorage.getItem('users') || '[]');
-        const userIndex = users.findIndex(u => u.id === userId);
-        
-        if (userIndex === -1) {
-            throw new Error('Пользователь не найден');
-        }
+        try {
+            // Пытаемся использовать SQL базу
+            if (window.sqlDB && window.sqlDB.db) {
+                return await window.sqlDB.updateUser(userId, userData);
+            }
+            
+            // Fallback на localStorage
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const userIndex = users.findIndex(u => u.id === userId);
+            
+            if (userIndex === -1) {
+                throw new Error('Пользователь не найден');
+            }
 
-        if (userData.role) {
-            userData.permissions = this.getPermissionsByRole(userData.role);
-        }
+            if (userData.role) {
+                userData.permissions = this.getPermissionsByRole(userData.role);
+            }
 
-        users[userIndex] = { ...users[userIndex], ...userData };
-        localStorage.setItem('users', JSON.stringify(users));
-        
-        return users[userIndex];
+            users[userIndex] = { ...users[userIndex], ...userData };
+            localStorage.setItem('users', JSON.stringify(users));
+            
+            return users[userIndex];
+        } catch (error) {
+            console.error('Ошибка обновления пользователя:', error);
+            throw error;
+        }
     }
 
-    deleteUser(userId) {
+    async deleteUser(userId) {
         if (!this.hasPermission('delete_users')) {
             throw new Error('Недостаточно прав для удаления пользователей');
         }
@@ -152,18 +197,41 @@ class AuthService {
             throw new Error('Нельзя удалить свою учетную запись');
         }
 
-        const users = JSON.parse(localStorage.getItem('users') || '[]');
-        const updatedUsers = users.filter(u => u.id !== userId);
-        localStorage.setItem('users', JSON.stringify(updatedUsers));
-        
-        return true;
+        try {
+            // Пытаемся использовать SQL базу
+            if (window.sqlDB && window.sqlDB.db) {
+                return await window.sqlDB.deleteUser(userId);
+            }
+            
+            // Fallback на localStorage
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const updatedUsers = users.filter(u => u.id !== userId);
+            localStorage.setItem('users', JSON.stringify(updatedUsers));
+            
+            return true;
+        } catch (error) {
+            console.error('Ошибка удаления пользователя:', error);
+            throw error;
+        }
     }
 
-    getAllUsers() {
+    async getAllUsers() {
         if (!this.hasPermission('create_users')) {
             return [];
         }
-        return JSON.parse(localStorage.getItem('users') || '[]');
+
+        try {
+            // Пытаемся использовать SQL базу
+            if (window.sqlDB && window.sqlDB.db) {
+                return await window.sqlDB.getAllUsers();
+            }
+            
+            // Fallback на localStorage
+            return JSON.parse(localStorage.getItem('users') || '[]');
+        } catch (error) {
+            console.error('Ошибка получения пользователей:', error);
+            return [];
+        }
     }
 
     getPermissionsByRole(role) {
@@ -187,12 +255,14 @@ if (document.getElementById('loginForm')) {
         const password = document.getElementById('password').value;
         const errorMessage = document.getElementById('error-message');
 
-        if (auth.login(username, password)) {
-            window.location.href = 'dashboard.html';
-        } else {
-            errorMessage.textContent = 'Неверный логин или пароль';
-            errorMessage.style.display = 'block';
-        }
+        auth.login(username, password).then(success => {
+            if (success) {
+                window.location.href = 'dashboard.html';
+            } else {
+                errorMessage.textContent = 'Неверный логин или пароль';
+                errorMessage.style.display = 'block';
+            }
+        });
     });
 }
 

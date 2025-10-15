@@ -14,15 +14,15 @@
                 <h2>Service Desk</h2>
                 <p id="userInfo">Пользователь: </p>
             </div>
-             <nav class="sidebar-nav">
-    <a href="#" class="nav-item active" data-tab="tickets">Заявки</a>
-    <a href="#" class="nav-item" data-tab="create-ticket">Создать заявку</a>
-    <a href="#" class="nav-item" data-tab="users">Пользователи</a>
-    <a href="#" class="nav-item" data-tab="reports">Отчеты</a>
-    <!-- Добавляем вкладку для админа -->
-    <a href="#" class="nav-item admin-only" data-tab="user-management" style="display: none;">Управление пользователями</a>
-    <a href="#" id="logoutBtn" class="nav-item logout">Выйти</a>
-</nav>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-tab="tickets">Заявки</a>
+                <a href="#" class="nav-item" data-tab="create-ticket">Создать заявку</a>
+                <a href="#" class="nav-item" data-tab="users">Пользователи</a>
+                <a href="#" class="nav-item" data-tab="reports">Отчеты</a>
+                <!-- Добавляем вкладку для админа -->
+                <a href="#" class="nav-item admin-only" data-tab="user-management" style="display: none;">Управление пользователями</a>
+                <a href="#" id="logoutBtn" class="nav-item logout">Выйти</a>
+            </nav>
         </div>
 
         <!-- Main Content -->
@@ -113,29 +113,34 @@
                 </div>
             </div>
 
-            <!-- Добавьте эту вкладку в main-content после существующих вкладок -->
-<div id="user-management" class="tab-content">
-    <div class="user-management-header">
-        <h3>Управление пользователями</h3>
-        <button id="createUserBtn" class="btn-primary">➕ Создать пользователя</button>
+            <!-- User Management Tab -->
+            <div id="user-management" class="tab-content">
+                <div class="user-management-header">
+                    <h3>Управление пользователями</h3>
+                    <button id="createUserBtn" class="btn-primary">➕ Создать пользователя</button>
+                </div>
+                
+                <div class="users-filters">
+                    <input type="text" id="searchUsers" placeholder="Поиск пользователей...">
+                    <select id="roleFilter">
+                        <option value="">Все роли</option>
+                        <option value="admin">Администратор</option>
+                        <option value="manager">Менеджер</option>
+                        <option value="user">Пользователь</option>
+                    </select>
+                </div>
+                
+                <div class="users-management-list" id="usersManagementList">
+                    <!-- Список пользователей будет здесь -->
+                </div>
+            </div>
+        </div>
     </div>
-    
-    <div class="users-filters">
-        <input type="text" id="searchUsers" placeholder="Поиск пользователей...">
-        <select id="roleFilter">
-            <option value="">Все роли</option>
-            <option value="admin">Администратор</option>
-            <option value="manager">Менеджер</option>
-            <option value="user">Пользователь</option>
-        </select>
-    </div>
-    
-    <div class="users-management-list" id="usersManagementList">
-        <!-- Список пользователей будет здесь -->
-    </div>
-</div>
-    <script src="js/database.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/app.js"></script>
+
+    <!-- Убрал дублирование скриптов -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script src="js/sql-database.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>
