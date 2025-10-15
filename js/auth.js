@@ -35,25 +35,42 @@ class AuthService {
 
     async login(username, password) {
         try {
+            console.log('🔐 Попытка входа для пользователя:', username);
+            
             // Пытаемся использовать SQL базу
             if (window.sqlDB && window.sqlDB.db) {
+                console.log('📊 Используем SQL базу данных');
                 const user = await window.sqlDB.getUserByUsername(username);
+                console.log('👤 Результат поиска в SQL:', user);
                 
-                if (user && user.password === password && user.is_active === 1) {
+                if (user && user.password === password && user.isActive === true) {
+                    console.log('✅ Пароль и статус верны');
                     this.currentUser = user;
                     localStorage.setItem('currentUser', JSON.stringify(user));
                     
                     // Обновляем время последнего входа
-                    await window.sqlDB.updateUser(user.id, {
-                        last_login: new Date().toISOString()
-                    });
+                    try {
+                        await window.sqlDB.updateUser(user.id, {
+                            lastLogin: new Date().toISOString()
+                        });
+                        console.log('🕐 Время входа обновлено');
+                    } catch (updateError) {
+                        console.warn('⚠️ Не удалось обновить время входа:', updateError);
+                    }
                     
                     console.log('✅ Успешный вход через SQL:', user.name);
                     return true;
+                } else {
+                    console.log('❌ SQL аутентификация не удалась:', {
+                        userFound: !!user,
+                        passwordMatch: user ? user.password === password : false,
+                        isActive: user ? user.isActive : false
+                    });
                 }
             }
             
             // Fallback на localStorage
+            console.log('🔄 Используем localStorage как fallback');
             const users = JSON.parse(localStorage.getItem('users') || '[]');
             const user = users.find(u => 
                 u.username.toLowerCase() === username.toLowerCase() && 
@@ -62,14 +79,16 @@ class AuthService {
             );
             
             if (user) {
+                console.log('✅ Успешный вход через localStorage:', user.name);
                 this.currentUser = user;
                 localStorage.setItem('currentUser', JSON.stringify(user));
                 return true;
             }
             
+            console.log('❌ Аутентификация не удалась во всех методах');
             return false;
         } catch (error) {
-            console.error('Ошибка входа:', error);
+            console.error('💥 Ошибка входа:', error);
             return false;
         }
     }
@@ -255,13 +274,21 @@ if (document.getElementById('loginForm')) {
         const password = document.getElementById('password').value;
         const errorMessage = document.getElementById('error-message');
 
+        console.log('📝 Обработка формы входа:', { username, password });
+        
         auth.login(username, password).then(success => {
             if (success) {
+                console.log('🎉 Перенаправление на dashboard');
                 window.location.href = 'dashboard.html';
             } else {
+                console.log('❌ Показать сообщение об ошибке');
                 errorMessage.textContent = 'Неверный логин или пароль';
                 errorMessage.style.display = 'block';
             }
+        }).catch(error => {
+            console.error('💥 Ошибка при входе:', error);
+            errorMessage.textContent = 'Ошибка при входе в систему';
+            errorMessage.style.display = 'block';
         });
     });
 }
@@ -280,3 +307,8 @@ if (window.location.pathname.includes('dashboard.html')) {
         window.location.href = 'login.html';
     }
 }
+
+// Добавим отладочную информацию
+console.log('🔧 AuthService инициализирован');
+console.log('👤 Текущий пользователь:', auth.currentUser);
+console.log('🔐 Доступные пользователи в localStorage:', JSON.parse(localStorage.getItem('users') || '[]'));
