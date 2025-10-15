@@ -13,21 +13,26 @@
             <form id="loginForm">
                 <div class="form-group">
                     <label for="username">Логин:</label>
-                    <input type="text" id="username" name="username" required>
+                    <input type="text" id="username" name="username" required placeholder="Введите логин">
                 </div>
                 <div class="form-group">
                     <label for="password">Пароль:</label>
-                    <input type="password" id="password" name="password" required>
+                    <input type="password" id="password" name="password" required placeholder="Введите пароль">
                 </div>
                 <button type="submit" class="login-btn">Войти</button>
             </form>
             <div id="error-message" class="error-message"></div>
+            
+            <!-- Убрал блок с отображением логина/пароля -->
+            <!-- Оставил только кнопку сброса для админов -->
+            <div style="margin-top: 20px; text-align: center;">
+            </div>
         </div>
     </div>
-    
-    <!-- Убрал дублирование скриптов -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
-    <script src="js/sql-database.js"></script>
+
+    <!-- Скрипты -->
+    <script src="js/init.js"></script>
+    <script src="js/data-manager.js"></script>
     <script src="js/auth.js"></script>
 </body>
 </html>

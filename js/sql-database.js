@@ -8,48 +8,199 @@ class SQLDatabase {
 
     async init() {
         try {
-            // Загружаем SQL.js
-            const SQL = await initSqlJs({
-                locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
-            });
+            console.log('🔄 Инициализация SQL базы данных...');
+            
+            // Ждем загрузки SQL.js
+            if (typeof window.SQL === 'undefined') {
+                console.error('❌ SQL.js не загружен');
+                setTimeout(() => this.init(), 1000); // Повторяем попытку
+                return;
+            }
+
+            console.log('✅ SQL.js загружен, создаем базу данных...');
 
             // Восстанавливаем базу из localStorage или создаем новую
-            const savedDb = localStorage.getItem(this.storageKey);
+            const savedDB = localStorage.getItem(this.storageKey);
             
-            if (savedDb) {
-                // Конвертируем base64 обратно в Uint8Array
-                const data = this.base64ToUint8Array(savedDb);
-                this.db = new SQL.Database(data);
-                console.log('✅ База данных восстановлена из localStorage');
+            if (savedDB) {
+                try {
+                    const arrayBuffer = this.base64ToUint8Array(savedDB);
+                    this.db = new window.SQL.Database(arrayBuffer);
+                    console.log('✅ База данных восстановлена из localStorage');
+                } catch (error) {
+                    console.log('⚠️ Ошибка восстановления, создаем новую базу');
+                    this.createNewDatabase();
+                }
             } else {
-                this.db = new SQL.Database();
-                console.log('✅ Новая база данных создана');
+                this.createNewDatabase();
             }
-            
-            // Инициализируем таблицы
-            this.initializeTables();
             
         } catch (error) {
             console.error('❌ Ошибка инициализации базы данных:', error);
-            this.useFallback = true;
+            this.createNewDatabase();
         }
     }
 
-    // Сохраняем базу в localStorage
-    saveDatabase() {
-        if (this.db) {
-            try {
-                const data = this.db.export();
-                const base64 = this.uint8ArrayToBase64(data);
-                localStorage.setItem(this.storageKey, base64);
-                console.log('💾 База данных сохранена');
-            } catch (error) {
-                console.error('❌ Ошибка сохранения базы:', error);
+    createNewDatabase() {
+        try {
+            this.db = new window.SQL.Database();
+            console.log('✅ Новая база данных создана');
+            this.createTables();
+            this.createDefaultAdmin();
+            this.saveDatabase();
+        } catch (error) {
+            console.error('❌ Ошибка создания новой базы:', error);
+        }
+    }
+
+    createTables() {
+        try {
+            console.log('📊 Создание таблиц...');
+
+            // Таблица пользователей
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    email TEXT,
+                    role TEXT NOT NULL DEFAULT 'user',
+                    department TEXT,
+                    created_date TEXT,
+                    isActive INTEGER DEFAULT 1,
+                    permissions TEXT,
+                    lastLogin TEXT
+                )
+            `);
+
+            // Таблица подразделений
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS departments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    created_date TEXT
+                )
+            `);
+
+            // Таблица категорий
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    department_id INTEGER,
+                    created_date TEXT,
+                    FOREIGN KEY (department_id) REFERENCES departments(id)
+                )
+            `);
+
+            // Таблица заявок
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS tickets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    status TEXT DEFAULT 'open',
+                    priority TEXT DEFAULT 'medium',
+                    department_id INTEGER,
+                    category_id INTEGER,
+                    created_by INTEGER,
+                    assigned_to INTEGER,
+                    created_date TEXT,
+                    updated_date TEXT,
+                    FOREIGN KEY (department_id) REFERENCES departments(id),
+                    FOREIGN KEY (category_id) REFERENCES categories(id),
+                    FOREIGN KEY (created_by) REFERENCES users(id)
+                )
+            `);
+
+            console.log('✅ Все таблицы созданы/проверены');
+
+        } catch (error) {
+            console.error('❌ Ошибка создания таблиц:', error);
+        }
+    }
+
+    createDefaultAdmin() {
+        try {
+            // Проверяем, есть ли уже администратор
+            const result = this.db.exec("SELECT id FROM users WHERE username = 'admin'");
+            if (result.length > 0 && result[0].values.length > 0) {
+                console.log('✅ Администратор уже существует');
+                return;
             }
+
+            // Создаем администратора
+            const timestamp = new Date().toISOString();
+            const permissions = JSON.stringify([
+                'create_users', 'edit_users', 'delete_users', 
+                'manage_tickets', 'view_reports', 'system_settings',
+                'export_data', 'manage_categories', 'manage_departments'
+            ]);
+
+            this.db.run(`
+                INSERT INTO users (username, password, name, email, role, department, 
+                                 created_date, isActive, permissions)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                'admin',
+                'Fghtkm123',
+                'Главный Администратор',
+                'admin@company.com',
+                'admin',
+                'IT',
+                timestamp,
+                1,
+                permissions
+            ]);
+
+            console.log('✅ Администратор создан');
+
+        } catch (error) {
+            console.error('❌ Ошибка создания администратора:', error);
         }
     }
 
-    // Конвертируем Uint8Array в base64
+    // Метод для пересоздания таблиц
+    recreateTables() {
+        try {
+            console.log('🔄 Пересоздание таблиц...');
+            
+            // Удаляем старые таблицы
+            this.db.run('DROP TABLE IF EXISTS tickets');
+            this.db.run('DROP TABLE IF EXISTS categories');
+            this.db.run('DROP TABLE IF EXISTS departments');
+            this.db.run('DROP TABLE IF EXISTS users');
+            
+            // Создаем заново
+            this.createTables();
+            this.createDefaultAdmin();
+            this.saveDatabase();
+            
+            console.log('✅ Таблицы пересозданы');
+            
+        } catch (error) {
+            console.error('❌ Ошибка пересоздания таблиц:', error);
+        }
+    }
+
+    // Сохранение базы данных
+    saveDatabase() {
+        try {
+            if (this.db) {
+                const binaryArray = this.db.export();
+                const base64String = this.uint8ArrayToBase64(binaryArray);
+                localStorage.setItem(this.storageKey, base64String);
+                console.log('💾 База данных сохранена');
+            }
+        } catch (error) {
+            console.error('❌ Ошибка сохранения базы данных:', error);
+        }
+    }
+
+    // Конвертация в base64
     uint8ArrayToBase64(uint8Array) {
         let binary = '';
         const len = uint8Array.byteLength;
@@ -59,7 +210,7 @@ class SQLDatabase {
         return btoa(binary);
     }
 
-    // Конвертируем base64 в Uint8Array
+    // Конвертация из base64
     base64ToUint8Array(base64) {
         const binary = atob(base64);
         const len = binary.length;
@@ -70,404 +221,488 @@ class SQLDatabase {
         return bytes;
     }
 
-    initializeTables() {
-        // Таблица пользователей
-        this.db.run(`
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                name TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                department TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'user',
-                created DATETIME DEFAULT CURRENT_TIMESTAMP,
-                last_login DATETIME,
-                is_active BOOLEAN DEFAULT 1,
-                permissions TEXT,
-                created_by TEXT
-            )
-        `);
+    // МЕТОДЫ ДЛЯ РАБОТЫ С ПОЛЬЗОВАТЕЛЯМИ
 
-        // Таблица заявок
-        this.db.run(`
-            CREATE TABLE IF NOT EXISTS tickets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                description TEXT NOT NULL,
-                priority TEXT NOT NULL,
-                category TEXT NOT NULL,
-                status TEXT DEFAULT 'open',
-                created_by TEXT NOT NULL,
-                assigned_to TEXT,
-                created DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        // Проверяем есть ли администратор
-        const adminCheck = this.db.exec("SELECT * FROM users WHERE username = 'admin'");
-        if (adminCheck[0]?.values.length === 0) {
-            this.createAdminUser();
-        } else {
-            // ОБНОВЛЯЕМ существующего admin чтобы права были правильными
-            this.fixAdminPermissions();
-        }
-
-        // Запускаем миграции для исправления возможных проблем
-        this.runMigrations();
-
-        this.saveDatabase(); // Сохраняем после инициализации
-        console.log('✅ Таблицы базы данных созданы');
-    }
-
-    // Добавить метод для исправления прав администратора
-    fixAdminPermissions() {
-        const adminPermissions = JSON.stringify(this.getAdminPermissions());
-        
-        this.db.run(
-            "UPDATE users SET role = 'admin', permissions = ? WHERE username = 'admin'",
-            [adminPermissions]
-        );
-        console.log('🔧 Права администратора проверены и исправлены');
-    }
-
-    // Добавить метод для миграций
-    runMigrations() {
-        console.log('🔄 Запуск миграций базы данных...');
-        
-        const migrations = [
-            // Миграция 1: исправить права администраторов
-            `UPDATE users SET permissions = '${JSON.stringify(this.getAdminPermissions())}' 
-             WHERE role = 'admin' AND permissions NOT LIKE '%create_users%'`,
-            
-            // Миграция 2: убедиться что admin имеет роль admin
-            `UPDATE users SET role = 'admin' WHERE username = 'admin' AND role != 'admin'`,
-            
-            // Миграция 3: добавить отсутствующие права для существующих пользователей
-            `UPDATE users SET permissions = '${JSON.stringify(this.getPermissionsByRole('admin'))}' 
-             WHERE username = 'admin'`
-        ];
-        
-        migrations.forEach((migration, index) => {
-            try {
-                this.db.exec(migration);
-                console.log(`✅ Миграция ${index + 1} выполнена`);
-            } catch (error) {
-                console.warn(`⚠️ Миграция ${index + 1} пропущена:`, error.message);
-            }
-        });
-    }
-
-    createAdminUser() {
-        const adminUser = {
-            username: 'admin',
-            password: 'Fghtkm123',
-            name: 'Главный Администратор',
-            email: 'admin@company.com',
-            department: 'IT',
-            role: 'admin',
-            permissions: JSON.stringify(this.getAdminPermissions()),
-            created_by: 'system'
-        };
-
-        this.db.run(`
-            INSERT INTO users (username, password, name, email, department, role, permissions, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-            adminUser.username,
-            adminUser.password,
-            adminUser.name,
-            adminUser.email,
-            adminUser.department,
-            adminUser.role,
-            adminUser.permissions,
-            adminUser.created_by
-        ]);
-
-        this.saveDatabase(); // Сохраняем после создания админа
-        console.log('✅ Администратор создан в SQL базе');
-    }
-
-    // Методы для работы с пользователями
-    async createUser(userData) {
+    // Получить пользователя по логину
+    getUserByUsername(username) {
         try {
-            // ЗАЩИТА: проверяем что не перезаписываем администратора
-            if (userData.username !== 'admin') {
-                const adminCheck = this.db.exec("SELECT id FROM users WHERE username = 'admin'");
-                if (adminCheck[0]?.values.length > 0) {
-                    const adminId = adminCheck[0].values[0][0];
-                    console.log('🔒 Admin ID защищен:', adminId);
-                }
+            const result = this.db.exec(`
+                SELECT id, username, password, name, email, role, department, 
+                       created_date, isActive, permissions, lastLogin
+                FROM users WHERE username = ? AND isActive = 1
+            `, [username]);
+            
+            if (result.length === 0 || result[0].values.length === 0) {
+                return null;
             }
-
-            // Проверяем уникальность логина
-            const usernameCheck = this.db.exec(
-                "SELECT id FROM users WHERE username = ?", 
-                [userData.username]
-            );
             
-            if (usernameCheck[0]?.values.length > 0) {
-                throw new Error('Пользователь с таким логином уже существует');
-            }
-
-            // Проверяем уникальность email
-            const emailCheck = this.db.exec(
-                "SELECT id FROM users WHERE email = ?", 
-                [userData.email]
-            );
-            
-            if (emailCheck[0]?.values.length > 0) {
-                throw new Error('Пользователь с таким email уже существует');
-            }
-
-            const permissions = this.getPermissionsByRole(userData.role);
-
-            this.db.run(`
-                INSERT INTO users (username, password, name, email, department, role, permissions, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
-                userData.username,
-                userData.password,
-                userData.name,
-                userData.email,
-                userData.department,
-                userData.role,
-                JSON.stringify(permissions),
-                userData.createdBy || 'system'
-            ]);
-
-            this.saveDatabase(); // Сохраняем после создания пользователя
-            
-            console.log('✅ Пользователь создан в SQL базе:', userData.username);
-            return this.getUserByUsername(userData.username);
-            
+            const userData = result[0].values[0];
+            return {
+                id: userData[0],
+                username: userData[1],
+                password: userData[2],
+                name: userData[3],
+                email: userData[4],
+                role: userData[5],
+                department: userData[6],
+                created_date: userData[7],
+                isActive: userData[8] === 1,
+                permissions: userData[9] ? JSON.parse(userData[9]) : [],
+                lastLogin: userData[10]
+            };
         } catch (error) {
-            console.error('❌ Ошибка создания пользователя:', error);
-            throw error;
-        }
-    }
-
-    async getUserByUsername(username) {
-        try {
-            const result = this.db.exec(
-                "SELECT * FROM users WHERE username = ?", 
-                [username]
-            );
-            
-            if (result[0]?.values.length > 0) {
-                const user = this.mapUserFromDB(result[0].values[0], result[0].columns);
-                return user;
-            }
-            return null;
-        } catch (error) {
-            console.error('❌ Ошибка получения пользователя:', error);
+            console.error('❌ Ошибка поиска пользователя:', error);
             return null;
         }
     }
 
-    async getAllUsers() {
+    // Получить всех пользователей
+    getAllUsers() {
         try {
-            const result = this.db.exec("SELECT * FROM users ORDER BY created DESC");
-            if (result[0]?.values.length > 0) {
-                return result[0].values.map(row => 
-                    this.mapUserFromDB(row, result[0].columns)
-                );
-            }
-            return [];
+            const result = this.db.exec(`
+                SELECT id, username, name, email, role, department, 
+                       created_date, isActive, permissions, lastLogin
+                FROM users 
+                ORDER BY created_date DESC
+            `);
+            
+            if (result.length === 0) return [];
+            
+            return result[0].values.map(row => ({
+                id: row[0],
+                username: row[1],
+                name: row[2],
+                email: row[3],
+                role: row[4],
+                department: row[5],
+                created_date: row[6],
+                isActive: row[7] === 1,
+                permissions: row[8] ? JSON.parse(row[8]) : [],
+                lastLogin: row[9]
+            }));
         } catch (error) {
             console.error('❌ Ошибка получения пользователей:', error);
             return [];
         }
     }
 
-    async updateUser(userId, updates) {
+    // Создать пользователя
+    createUser(userData) {
         try {
-            // ЗАЩИТА: Не позволяем изменить роль или права администратора
-            const user = await this.getUserById(userId);
-            if (user && user.username === 'admin') {
-                if (updates.role && updates.role !== 'admin') {
-                    throw new Error('Нельзя изменить роль администратора');
-                }
-                if (updates.permissions) {
-                    console.warn('⚠️ Права администратора защищены от изменений');
-                    delete updates.permissions; // Игнорируем попытку изменить права
-                }
-                if (updates.username && updates.username !== 'admin') {
-                    throw new Error('Нельзя изменить логин администратора');
-                }
-            }
+            const timestamp = new Date().toISOString();
+            const permissions = JSON.stringify(userData.permissions || []);
 
-            const setClause = [];
+            this.db.run(`
+                INSERT INTO users (username, password, name, email, role, department, 
+                                 created_date, isActive, permissions)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                userData.username,
+                userData.password,
+                userData.name,
+                userData.email,
+                userData.role,
+                userData.department,
+                timestamp,
+                1,
+                permissions
+            ]);
+
+            this.saveDatabase();
+            console.log('✅ Пользователь создан:', userData.username);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Ошибка создания пользователя:', error);
+            throw error;
+        }
+    }
+
+    // Обновить пользователя
+    updateUser(userId, updates) {
+        try {
+            const setClauses = [];
             const values = [];
 
-            // Преобразуем названия полей для SQL
-            const fieldMap = {
-                isActive: 'is_active',
-                lastLogin: 'last_login',
-                createdBy: 'created_by'
-            };
-
             Object.keys(updates).forEach(key => {
-                const dbField = fieldMap[key] || key;
-                
-                if (dbField === 'permissions' && typeof updates[key] === 'object') {
-                    setClause.push(`${dbField} = ?`);
-                    values.push(JSON.stringify(updates[key]));
-                } else {
-                    setClause.push(`${dbField} = ?`);
-                    values.push(updates[key]);
-                }
+                setClauses.push(`${key} = ?`);
+                values.push(updates[key]);
             });
 
             values.push(userId);
 
-            this.db.run(
-                `UPDATE users SET ${setClause.join(', ')} WHERE id = ?`,
-                values
-            );
+            const query = `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`;
+            this.db.run(query, values);
 
-            this.saveDatabase(); // Сохраняем после обновления
-            
-            console.log('✅ Пользователь обновлен, ID:', userId);
-            return this.getUserById(userId);
-            
+            this.saveDatabase();
+            console.log('✅ Пользователь обновлен:', userId);
+            return true;
+
         } catch (error) {
             console.error('❌ Ошибка обновления пользователя:', error);
             throw error;
         }
     }
 
-    async getUserById(userId) {
+    // Удалить пользователя
+    deleteUser(userId) {
         try {
-            const result = this.db.exec(
-                "SELECT * FROM users WHERE id = ?", 
-                [userId]
-            );
-            
-            if (result[0]?.values.length > 0) {
-                return this.mapUserFromDB(result[0].values[0], result[0].columns);
-            }
-            return null;
-        } catch (error) {
-            console.error('❌ Ошибка получения пользователя:', error);
-            return null;
-        }
-    }
-
-    async deleteUser(userId) {
-        try {
-            // ЗАЩИТА: Не позволяем удалить администратора
-            const user = await this.getUserById(userId);
-            if (user && user.username === 'admin') {
-                throw new Error('Нельзя удалить администратора системы');
-            }
-
-            this.db.run("DELETE FROM users WHERE id = ?", [userId]);
-            this.saveDatabase(); // Сохраняем после удаления
-            console.log('✅ Пользователь удален, ID:', userId);
+            this.db.run('DELETE FROM users WHERE id = ?', [userId]);
+            this.saveDatabase();
+            console.log('✅ Пользователь удален:', userId);
             return true;
+
         } catch (error) {
             console.error('❌ Ошибка удаления пользователя:', error);
             throw error;
         }
     }
 
-    mapUserFromDB(row, columns) {
-        const user = {};
-        columns.forEach((col, index) => {
-            // Преобразуем названия полей обратно
-            const fieldMap = {
-                'is_active': 'isActive',
-                'last_login': 'lastLogin', 
-                'created_by': 'createdBy'
-            };
-            const fieldName = fieldMap[col] || col;
-            user[fieldName] = row[index];
-        });
+    // МЕТОДЫ ДЛЯ ПОДРАЗДЕЛЕНИЙ
 
-        // Парсим permissions из JSON строки
-        if (user.permissions) {
-            try {
-                user.permissions = JSON.parse(user.permissions);
-            } catch {
-                user.permissions = [];
-            }
-        }
-
-        // Преобразуем булевы значения
-        if (user.isActive !== undefined) {
-            user.isActive = Boolean(user.isActive);
-        }
-
-        return user;
-    }
-
-    getPermissionsByRole(role) {
-        const permissions = {
-            'admin': this.getAdminPermissions(),
-            'manager': [
-                'manage_tickets', 'view_reports', 'assign_tickets',
-                'edit_tickets', 'close_tickets'
-            ],
-            'user': [
-                'create_tickets', 'view_own_tickets', 'edit_own_tickets'
-            ]
-        };
-        
-        // Всегда возвращаем права, даже если роль не найдена
-        return permissions[role] || permissions['user'];
-    }
-
-    // Добавить отдельный метод для прав администратора
-    getAdminPermissions() {
-        return [
-            'create_users', 'edit_users', 'delete_users', 
-            'manage_tickets', 'view_reports', 'system_settings',
-            'export_data', 'manage_categories'
-        ];
-    }
-
-    // Отладочная информация
-    getDatabaseInfo() {
+    // Получить все подразделения
+    getAllDepartments() {
         try {
-            const userCount = this.db.exec("SELECT COUNT(*) as count FROM users")[0]?.values[0][0] || 0;
-            const adminCheck = this.db.exec("SELECT role, permissions FROM users WHERE username = 'admin'");
-            let adminInfo = 'Не найден';
+            const result = this.db.exec(`
+                SELECT d.*, 
+                       (SELECT COUNT(*) FROM categories c WHERE c.department_id = d.id) as categories_count
+                FROM departments d 
+                ORDER BY d.name
+            `);
             
-            if (adminCheck[0]?.values.length > 0) {
-                const admin = adminCheck[0].values[0];
-                adminInfo = `Роль: ${admin[0]}, Прав: ${JSON.parse(admin[1]).length}`;
-            }
+            if (result.length === 0) return [];
+            
+            return result[0].values.map(row => ({
+                id: row[0],
+                name: row[1],
+                description: row[2],
+                created_date: row[3],
+                categories_count: row[4] || 0
+            }));
+        } catch (error) {
+            console.error('❌ Ошибка получения подразделений:', error);
+            return [];
+        }
+    }
+
+    // Создать подразделение
+    createDepartment(departmentData) {
+        try {
+            const timestamp = new Date().toISOString();
+
+            this.db.run(`
+                INSERT INTO departments (name, description, created_date)
+                VALUES (?, ?, ?)
+            `, [
+                departmentData.name,
+                departmentData.description,
+                timestamp
+            ]);
+
+            this.saveDatabase();
+            console.log('✅ Подразделение создано:', departmentData.name);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Ошибка создания подразделения:', error);
+            throw error;
+        }
+    }
+
+    // Удалить подразделение
+    deleteDepartment(departmentId) {
+        try {
+            this.db.run('DELETE FROM departments WHERE id = ?', [departmentId]);
+            this.saveDatabase();
+            console.log('✅ Подразделение удалено:', departmentId);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Ошибка удаления подразделения:', error);
+            throw error;
+        }
+    }
+
+    // МЕТОДЫ ДЛЯ КАТЕГОРИЙ
+
+    // Получить все категории
+    getAllCategories() {
+        try {
+            const result = this.db.exec(`
+                SELECT c.*, d.name as department_name
+                FROM categories c 
+                LEFT JOIN departments d ON c.department_id = d.id 
+                ORDER BY d.name, c.name
+            `);
+            
+            if (result.length === 0) return [];
+            
+            return result[0].values.map(row => ({
+                id: row[0],
+                name: row[1],
+                description: row[2],
+                department_id: row[3],
+                created_date: row[4],
+                department_name: row[5]
+            }));
+        } catch (error) {
+            console.error('❌ Ошибка получения категорий:', error);
+            return [];
+        }
+    }
+
+    // Получить категории по подразделению
+    getCategoriesByDepartment(departmentId) {
+        try {
+            const result = this.db.exec(`
+                SELECT c.*, d.name as department_name
+                FROM categories c 
+                LEFT JOIN departments d ON c.department_id = d.id 
+                WHERE c.department_id = ?
+                ORDER BY c.name
+            `, [departmentId]);
+            
+            if (result.length === 0) return [];
+            
+            return result[0].values.map(row => ({
+                id: row[0],
+                name: row[1],
+                description: row[2],
+                department_id: row[3],
+                created_date: row[4],
+                department_name: row[5]
+            }));
+        } catch (error) {
+            console.error('❌ Ошибка получения категорий подразделения:', error);
+            return [];
+        }
+    }
+
+    // Создать категорию
+    createCategory(categoryData) {
+        try {
+            const timestamp = new Date().toISOString();
+
+            this.db.run(`
+                INSERT INTO categories (name, description, department_id, created_date)
+                VALUES (?, ?, ?, ?)
+            `, [
+                categoryData.name,
+                categoryData.description,
+                categoryData.departmentId,
+                timestamp
+            ]);
+
+            this.saveDatabase();
+            console.log('✅ Категория создана:', categoryData.name);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Ошибка создания категории:', error);
+            throw error;
+        }
+    }
+
+    // Удалить категорию
+    deleteCategory(categoryId) {
+        try {
+            this.db.run('DELETE FROM categories WHERE id = ?', [categoryId]);
+            this.saveDatabase();
+            console.log('✅ Категория удалена:', categoryId);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Ошибка удаления категории:', error);
+            throw error;
+        }
+    }
+
+    // МЕТОДЫ ДЛЯ ЗАЯВОК
+
+    // Получить все заявки
+    getAllTickets() {
+        try {
+            const result = this.db.exec(`
+                SELECT t.*, 
+                       d.name as department_name,
+                       c.name as category_name
+                FROM tickets t 
+                LEFT JOIN departments d ON t.department_id = d.id 
+                LEFT JOIN categories c ON t.category_id = c.id 
+                ORDER BY t.created_date DESC
+            `);
+            
+            if (result.length === 0) return [];
+            
+            return result[0].values.map(row => ({
+                id: row[0],
+                title: row[1],
+                description: row[2],
+                status: row[3],
+                priority: row[4],
+                department_id: row[5],
+                category_id: row[6],
+                created_by: row[7],
+                assigned_to: row[8],
+                created_date: row[9],
+                updated_date: row[10],
+                department_name: row[11],
+                category_name: row[12]
+            }));
+        } catch (error) {
+            console.error('❌ Ошибка получения заявок:', error);
+            return [];
+        }
+    }
+
+    // Получить заявки пользователя
+    getTicketsByUser(userId) {
+        try {
+            const result = this.db.exec(`
+                SELECT t.*, 
+                       d.name as department_name,
+                       c.name as category_name
+                FROM tickets t 
+                LEFT JOIN departments d ON t.department_id = d.id 
+                LEFT JOIN categories c ON t.category_id = c.id 
+                WHERE t.created_by = ?
+                ORDER BY t.created_date DESC
+            `, [userId]);
+            
+            if (result.length === 0) return [];
+            
+            return result[0].values.map(row => ({
+                id: row[0],
+                title: row[1],
+                description: row[2],
+                status: row[3],
+                priority: row[4],
+                department_id: row[5],
+                category_id: row[6],
+                created_by: row[7],
+                assigned_to: row[8],
+                created_date: row[9],
+                updated_date: row[10],
+                department_name: row[11],
+                category_name: row[12]
+            }));
+        } catch (error) {
+            console.error('❌ Ошибка получения заявок пользователя:', error);
+            return [];
+        }
+    }
+
+    // Создать заявку
+    createTicket(ticketData) {
+        try {
+            const timestamp = new Date().toISOString();
+
+            this.db.run(`
+                INSERT INTO tickets (title, description, status, priority, department_id, category_id, created_by, created_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                ticketData.title,
+                ticketData.description,
+                ticketData.status || 'open',
+                ticketData.priority || 'medium',
+                ticketData.departmentId,
+                ticketData.categoryId,
+                ticketData.createdBy,
+                timestamp
+            ]);
+
+            this.saveDatabase();
+            console.log('✅ Заявка создана:', ticketData.title);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Ошибка создания заявки:', error);
+            throw error;
+        }
+    }
+
+    // Обновить заявку
+    updateTicket(ticketId, updates) {
+        try {
+            updates.updated_date = new Date().toISOString();
+            const setClauses = [];
+            const values = [];
+
+            Object.keys(updates).forEach(key => {
+                setClauses.push(`${key} = ?`);
+                values.push(updates[key]);
+            });
+
+            values.push(ticketId);
+
+            const query = `UPDATE tickets SET ${setClauses.join(', ')} WHERE id = ?`;
+            this.db.run(query, values);
+
+            this.saveDatabase();
+            console.log('✅ Заявка обновлена:', ticketId);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Ошибка обновления заявки:', error);
+            throw error;
+        }
+    }
+
+    // Удалить заявку
+    deleteTicket(ticketId) {
+        try {
+            this.db.run('DELETE FROM tickets WHERE id = ?', [ticketId]);
+            this.saveDatabase();
+            console.log('✅ Заявка удалена:', ticketId);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Ошибка удаления заявки:', error);
+            throw error;
+        }
+    }
+
+    // Получить статистику заявок
+    getTicketsStats() {
+        try {
+            const total = this.db.exec("SELECT COUNT(*) FROM tickets")[0]?.values[0][0] || 0;
+            const open = this.db.exec("SELECT COUNT(*) FROM tickets WHERE status = 'open'")[0]?.values[0][0] || 0;
+            const inProgress = this.db.exec("SELECT COUNT(*) FROM tickets WHERE status = 'in-progress'")[0]?.values[0][0] || 0;
+            const resolved = this.db.exec("SELECT COUNT(*) FROM tickets WHERE status = 'resolved'")[0]?.values[0][0] || 0;
             
             return {
-                totalUsers: userCount,
-                adminUser: adminInfo,
-                storageSize: localStorage.getItem(this.storageKey)?.length || 0,
-                storageKey: this.storageKey
+                total: total,
+                open: open,
+                inProgress: inProgress,
+                resolved: resolved
             };
         } catch (error) {
-            return { error: error.message };
+            console.error('❌ Ошибка получения статистики:', error);
+            return { total: 0, open: 0, inProgress: 0, resolved: 0 };
         }
     }
 }
 
-// Создаем глобальный экземпляр базы данных
+// Создаем глобальный экземпляр
 window.sqlDB = new SQLDatabase();
 
-// Отладочные команды для консоли
-console.log(`
-🎮 Команды для отладки базы данных:
+// Глобальные функции для исправления
+window.fixDatabase = function() {
+    console.log('🔧 Исправление базы данных...');
+    if (window.sqlDB && window.sqlDB.db) {
+        window.sqlDB.recreateTables();
+        alert('✅ База данных исправлена! Попробуйте войти снова.');
+    } else {
+        alert('❌ База данных не инициализирована. Перезагрузите страницу.');
+    }
+};
 
-// Проверить состояние базы
-sqlDB.getDatabaseInfo()
-
-// Проверить всех пользователей
-sqlDB.getAllUsers().then(users => console.log('Пользователи:', users))
-
-// Проверить администратора
-sqlDB.getUserByUsername('admin').then(admin => console.log('Админ:', admin))
-
-// Проверить localStorage
-Object.keys(localStorage).forEach(key => console.log(key + ':', localStorage[key].length + ' chars'))
-`);
+window.recreateAdmin = function() {
+    console.log('👑 Принудительное создание администратора...');
+    if (window.sqlDB && window.sqlDB.db) {
+        window.sqlDB.createDefaultAdmin();
+        alert('✅ Администратор создан! Логин: admin, Пароль: Fghtkm123');
+    } else {
+        alert('❌ База данных не инициализирована.');
+    }
+};

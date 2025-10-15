@@ -1,124 +1,83 @@
 // js/init.js
-function initializeTestUsers() {
-    console.log('🔄 Инициализация пользователей системы...');
+console.log('🚀 Инициализация Service Desk System...');
+
+function initializeSystem() {
+    console.log('🔄 Инициализация системы...');
     
-    // Создаем пользователей с ПРАВИЛЬНЫМИ паролями
-    const defaultUsers = [
-        { 
-            id: 1, 
-            username: 'admin', 
-            password: 'Fghtkm123',  // ИСПРАВЛЕНО: ваш пароль
-            name: 'Главный Администратор', 
-            role: 'admin',
-            email: 'admin@company.com',
-            department: 'IT',
-            created: new Date().toISOString(),
-            isActive: true,  // ЯВНО указываем true
-            permissions: ['create_users', 'edit_users', 'delete_users', 'manage_tickets', 'view_reports']
-        },
-        { 
-            id: 2, 
-            username: 'manager', 
-            password: 'manager123', 
-            name: 'Менеджер поддержки', 
-            role: 'manager',
-            email: 'manager@company.com',
-            department: 'Техподдержка',
-            created: new Date().toISOString(),
-            isActive: true,
-            permissions: ['manage_tickets', 'view_reports']
-        },
-        { 
-            id: 3, 
-            username: 'user', 
-            password: 'user123', 
-            name: 'Обычный пользователь', 
-            role: 'user',
-            email: 'user@company.com',
-            department: 'Отдел продаж',
-            created: new Date().toISOString(),
-            isActive: true,
-            permissions: ['create_tickets']
-        }
-    ];
+    // Создаем администратора в localStorage
+    const adminUser = {
+        id: 1,
+        username: 'admin',
+        password: 'Fghtkm123',
+        name: 'Главный Администратор',
+        email: 'admin@company.com',
+        role: 'admin',
+        department: 'IT',
+        created_date: new Date().toISOString(),
+        isActive: true,
+        permissions: [
+            'create_users', 'edit_users', 'delete_users', 
+            'manage_tickets', 'view_reports', 'system_settings',
+            'export_data', 'manage_categories', 'manage_departments'
+        ],
+        lastLogin: null
+    };
+
+    // Сохраняем пользователей
+    localStorage.setItem('service_desk_users', JSON.stringify([adminUser]));
     
-    localStorage.setItem('users', JSON.stringify(defaultUsers));
-    console.log('✅ Пользователи системы созданы!');
-    console.log('👑 Администратор: admin / Fghtkm123 (полные права)');
-    console.log('👨‍💼 Менеджер: manager / manager123 (управление заявками)');
-    console.log('👤 Пользователь: user / user123 (создание заявок)');
+    // Инициализируем другие данные если нужно
+    if (!localStorage.getItem('service_departments')) {
+        localStorage.setItem('service_departments', JSON.stringify([]));
+    }
+    if (!localStorage.getItem('service_categories')) {
+        localStorage.setItem('service_categories', JSON.stringify([]));
+    }
+    if (!localStorage.getItem('service_tickets')) {
+        localStorage.setItem('service_tickets', JSON.stringify([]));
+    }
     
-    return defaultUsers;
+    console.log('✅ Система инициализирована!');
+    console.log('👑 Администратор: admin / Fghtkm123');
+    
+    return adminUser;
 }
 
-// Проверить текущих пользователей
-function checkCurrentUsers() {
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+// Проверяем и создаем систему если нужно
+function checkAndInitializeSystem() {
+    const users = JSON.parse(localStorage.getItem('service_desk_users') || '[]');
     
-    console.log('=== ТЕКУЩИЕ ДАННЫЕ СИСТЕМЫ ===');
-    console.log('Всего пользователей:', users.length);
-    users.forEach(user => {
-        console.log(`- Логин: "${user.username}" | Пароль: "${user.password}" | Активен: ${user.isActive} | Роль: ${user.role}`);
-    });
-    console.log('================================');
+    if (users.length === 0) {
+        console.log('📝 Система не инициализирована, создаем...');
+        initializeSystem();
+    } else {
+        console.log('✅ Система уже инициализирована');
+        console.log('👥 Пользователей:', users.length);
+    }
 }
 
-// Вызвать при загрузке
+// Запускаем при загрузке
 document.addEventListener('DOMContentLoaded', function() {
-    // Очищаем старые данные и создаем новых пользователей
-    localStorage.removeItem('users');
-    localStorage.removeItem('currentUser');
-    
-    initializeTestUsers();
-    checkCurrentUsers();
+    checkAndInitializeSystem();
 });
 
-// Функция для принудительного создания правильных пользователей
-window.createCorrectUsers = function() {
-    localStorage.removeItem('users');
-    localStorage.removeItem('currentUser');
-    
-    const users = [
-        { 
-            id: 1, 
-            username: 'admin', 
-            password: 'Fghtkm123', 
-            name: 'Главный Администратор', 
-            role: 'admin',
-            email: 'admin@company.com',
-            department: 'IT',
-            created: new Date().toISOString(),
-            isActive: true,
-            permissions: ['create_users', 'edit_users', 'delete_users', 'manage_tickets', 'view_reports']
-        }
-    ];
-    
-    localStorage.setItem('users', JSON.stringify(users));
-    console.log('✅ Правильные пользователи созданы!');
-    console.log('admin / Fghtkm123');
-    return users;
+// Глобальные функции для отладки
+window.debugSystem = function() {
+    console.log('=== ДЕБАГ СИСТЕМЫ ===');
+    console.log('Пользователи:', JSON.parse(localStorage.getItem('service_desk_users') || '[]'));
+    console.log('Текущий пользователь:', JSON.parse(localStorage.getItem('currentUser') || 'null'));
+    console.log('====================');
 };
 
-// Команды для отладки
-console.log(`
-🎮 КОМАНДЫ ДЛЯ ОТЛАДКИ В КОНСОЛИ:
+window.resetSystem = function() {
+    localStorage.removeItem('service_desk_users');
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('service_departments');
+    localStorage.removeItem('service_categories');
+    localStorage.removeItem('service_tickets');
+    console.log('✅ Система сброшена');
+    initializeSystem();
+    location.reload();
+};
 
-// Создать правильных пользователей
-createCorrectUsers()
-
-// Проверить пользователей
-JSON.parse(localStorage.getItem('users'))
-
-// Принудительно войти как admin
-const users = JSON.parse(localStorage.getItem('users'));
-if (users && users.length > 0) {
-    localStorage.setItem('currentUser', JSON.stringify(users[0]));
-    console.log('✅ Вошли как:', users[0].name);
-    window.location.href = 'dashboard.html';
-}
-
-// Очистить все данные
-localStorage.clear()
-location.reload()
-`);
+console.log('🎮 Команды: debugSystem(), resetSystem()');

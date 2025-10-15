@@ -18,9 +18,13 @@
                 <a href="#" class="nav-item active" data-tab="tickets">Заявки</a>
                 <a href="#" class="nav-item" data-tab="create-ticket">Создать заявку</a>
                 <a href="#" class="nav-item" data-tab="users">Пользователи</a>
+                <a href="#" class="nav-item admin-only" data-tab="departments-management" style="display: none;">
+                    Управление подразделениями
+                </a>
+                <a href="#" class="nav-item admin-only" data-tab="user-management" style="display: none;">
+                    Управление пользователями
+                </a>
                 <a href="#" class="nav-item" data-tab="reports">Отчеты</a>
-                <!-- Добавляем вкладку для админа -->
-                <a href="#" class="nav-item admin-only" data-tab="user-management" style="display: none;">Управление пользователями</a>
                 <a href="#" id="logoutBtn" class="nav-item logout">Выйти</a>
             </nav>
         </div>
@@ -63,21 +67,24 @@
                         <textarea id="ticketDescription" name="description" rows="5" required></textarea>
                     </div>
                     <div class="form-group">
-                        <label for="ticketPriority">Приоритет:</label>
-                        <select id="ticketPriority" name="priority" required>
-                            <option value="low">Низкий</option>
-                            <option value="medium">Средний</option>
-                            <option value="high">Высокий</option>
-                            <option value="critical">Критический</option>
+                        <label for="ticketDepartment">Подразделение:</label>
+                        <select id="ticketDepartment" name="departmentId" required>
+                            <option value="">Выберите подразделение</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label for="ticketCategory">Категория:</label>
-                        <select id="ticketCategory" name="category" required>
-                            <option value="hardware">Оборудование</option>
-                            <option value="software">ПО</option>
-                            <option value="network">Сеть</option>
-                            <option value="other">Другое</option>
+                        <select id="ticketCategory" name="categoryId" required>
+                            <option value="">Сначала выберите подразделение</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="ticketPriority">Приоритет:</label>
+                        <select id="ticketPriority" name="priority" required>
+                            <option value="low">Низкий</option>
+                            <option value="medium" selected>Средний</option>
+                            <option value="high">Высокий</option>
+                            <option value="critical">Критический</option>
                         </select>
                     </div>
                     <button type="submit" class="btn-primary">Создать заявку</button>
@@ -91,24 +98,36 @@
                 </div>
             </div>
 
-            <!-- Reports Tab -->
-            <div id="reports" class="tab-content">
-                <div class="reports-grid">
-                    <div class="report-card">
-                        <h3>Всего заявок</h3>
-                        <p id="totalTickets">0</p>
+            <!-- Departments Management Tab -->
+            <div id="departments-management" class="tab-content">
+                <div class="management-header">
+                    <h3>Управление подразделениями и категориями</h3>
+                </div>
+                
+                <div class="management-tabs">
+                    <button class="tab-button active" data-subtab="departments">Подразделения</button>
+                    <button class="tab-button" data-subtab="categories">Категории</button>
+                </div>
+                
+                <!-- Departments Subtab -->
+                <div id="departments-subtab" class="subtab-content active">
+                    <div class="action-bar">
+                        <button id="createDepartmentBtn" class="btn-primary">➕ Создать подразделение</button>
                     </div>
-                    <div class="report-card">
-                        <h3>Открытые заявки</h3>
-                        <p id="openTickets">0</p>
+                    
+                    <div class="departments-list" id="departmentsList">
+                        <!-- Список подразделений будет здесь -->
                     </div>
-                    <div class="report-card">
-                        <h3>В работе</h3>
-                        <p id="inProgressTickets">0</p>
+                </div>
+                
+                <!-- Categories Subtab -->
+                <div id="categories-subtab" class="subtab-content">
+                    <div class="action-bar">
+                        <button id="createCategoryBtn" class="btn-primary">➕ Создать категорию</button>
                     </div>
-                    <div class="report-card">
-                        <h3>Решено</h3>
-                        <p id="resolvedTickets">0</p>
+                    
+                    <div class="categories-list" id="categoriesList">
+                        <!-- Список категорий будет здесь -->
                     </div>
                 </div>
             </div>
@@ -134,13 +153,47 @@
                     <!-- Список пользователей будет здесь -->
                 </div>
             </div>
+
+            <!-- Reports Tab -->
+            <div id="reports" class="tab-content">
+                <div class="reports-grid">
+                    <div class="report-card">
+                        <h3>Всего заявок</h3>
+                        <p id="totalTickets">0</p>
+                    </div>
+                    <div class="report-card">
+                        <h3>Открытые заявки</h3>
+                        <p id="openTickets">0</p>
+                    </div>
+                    <div class="report-card">
+                        <h3>В работе</h3>
+                        <p id="inProgressTickets">0</p>
+                    </div>
+                    <div class="report-card">
+                        <h3>Решено</h3>
+                        <p id="resolvedTickets">0</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Убрал дублирование скриптов -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
-    <script src="js/sql-database.js"></script>
+    <!-- Модальные окна -->
+    <div id="modalOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <h3 id="modalTitle">Модальное окно</h3>
+            <div id="modalContent">
+                <!-- Контент модального окна -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Скрипты -->
+    <script src="js/init.js"></script>
+    <script src="js/data-manager.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/tickets.js"></script>
+    <script src="js/departments-categories.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>
