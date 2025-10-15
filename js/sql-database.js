@@ -109,10 +109,54 @@ class SQLDatabase {
         const adminCheck = this.db.exec("SELECT * FROM users WHERE username = 'admin'");
         if (adminCheck[0]?.values.length === 0) {
             this.createAdminUser();
+        } else {
+            // ОБНОВЛЯЕМ существующего admin чтобы права были правильными
+            this.fixAdminPermissions();
         }
+
+        // Запускаем миграции для исправления возможных проблем
+        this.runMigrations();
 
         this.saveDatabase(); // Сохраняем после инициализации
         console.log('✅ Таблицы базы данных созданы');
+    }
+
+    // Добавить метод для исправления прав администратора
+    fixAdminPermissions() {
+        const adminPermissions = JSON.stringify(this.getAdminPermissions());
+        
+        this.db.run(
+            "UPDATE users SET role = 'admin', permissions = ? WHERE username = 'admin'",
+            [adminPermissions]
+        );
+        console.log('🔧 Права администратора проверены и исправлены');
+    }
+
+    // Добавить метод для миграций
+    runMigrations() {
+        console.log('🔄 Запуск миграций базы данных...');
+        
+        const migrations = [
+            // Миграция 1: исправить права администраторов
+            `UPDATE users SET permissions = '${JSON.stringify(this.getAdminPermissions())}' 
+             WHERE role = 'admin' AND permissions NOT LIKE '%create_users%'`,
+            
+            // Миграция 2: убедиться что admin имеет роль admin
+            `UPDATE users SET role = 'admin' WHERE username = 'admin' AND role != 'admin'`,
+            
+            // Миграция 3: добавить отсутствующие права для существующих пользователей
+            `UPDATE users SET permissions = '${JSON.stringify(this.getPermissionsByRole('admin'))}' 
+             WHERE username = 'admin'`
+        ];
+        
+        migrations.forEach((migration, index) => {
+            try {
+                this.db.exec(migration);
+                console.log(`✅ Миграция ${index + 1} выполнена`);
+            } catch (error) {
+                console.warn(`⚠️ Миграция ${index + 1} пропущена:`, error.message);
+            }
+        });
     }
 
     createAdminUser() {
@@ -123,7 +167,7 @@ class SQLDatabase {
             email: 'admin@company.com',
             department: 'IT',
             role: 'admin',
-            permissions: JSON.stringify(['create_users', 'edit_users', 'delete_users', 'manage_tickets', 'view_reports']),
+            permissions: JSON.stringify(this.getAdminPermissions()),
             created_by: 'system'
         };
 
@@ -239,6 +283,21 @@ class SQLDatabase {
 
     async updateUser(userId, updates) {
         try {
+            // ЗАЩИТА: Не позволяем изменить роль или права администратора
+            const user = await this.getUserById(userId);
+            if (user && user.username === 'admin') {
+                if (updates.role && updates.role !== 'admin') {
+                    throw new Error('Нельзя изменить роль администратора');
+                }
+                if (updates.permissions) {
+                    console.warn('⚠️ Права администратора защищены от изменений');
+                    delete updates.permissions; // Игнорируем попытку изменить права
+                }
+                if (updates.username && updates.username !== 'admin') {
+                    throw new Error('Нельзя изменить логин администратора');
+                }
+            }
+
             const setClause = [];
             const values = [];
 
@@ -298,6 +357,12 @@ class SQLDatabase {
 
     async deleteUser(userId) {
         try {
+            // ЗАЩИТА: Не позволяем удалить администратора
+            const user = await this.getUserById(userId);
+            if (user && user.username === 'admin') {
+                throw new Error('Нельзя удалить администратора системы');
+            }
+
             this.db.run("DELETE FROM users WHERE id = ?", [userId]);
             this.saveDatabase(); // Сохраняем после удаления
             console.log('✅ Пользователь удален, ID:', userId);
@@ -340,19 +405,44 @@ class SQLDatabase {
 
     getPermissionsByRole(role) {
         const permissions = {
-            'admin': ['create_users', 'edit_users', 'delete_users', 'manage_tickets', 'view_reports'],
-            'manager': ['manage_tickets', 'view_reports'],
-            'user': ['create_tickets']
+            'admin': this.getAdminPermissions(),
+            'manager': [
+                'manage_tickets', 'view_reports', 'assign_tickets',
+                'edit_tickets', 'close_tickets'
+            ],
+            'user': [
+                'create_tickets', 'view_own_tickets', 'edit_own_tickets'
+            ]
         };
+        
+        // Всегда возвращаем права, даже если роль не найдена
         return permissions[role] || permissions['user'];
+    }
+
+    // Добавить отдельный метод для прав администратора
+    getAdminPermissions() {
+        return [
+            'create_users', 'edit_users', 'delete_users', 
+            'manage_tickets', 'view_reports', 'system_settings',
+            'export_data', 'manage_categories'
+        ];
     }
 
     // Отладочная информация
     getDatabaseInfo() {
         try {
             const userCount = this.db.exec("SELECT COUNT(*) as count FROM users")[0]?.values[0][0] || 0;
+            const adminCheck = this.db.exec("SELECT role, permissions FROM users WHERE username = 'admin'");
+            let adminInfo = 'Не найден';
+            
+            if (adminCheck[0]?.values.length > 0) {
+                const admin = adminCheck[0].values[0];
+                adminInfo = `Роль: ${admin[0]}, Прав: ${JSON.parse(admin[1]).length}`;
+            }
+            
             return {
                 totalUsers: userCount,
+                adminUser: adminInfo,
                 storageSize: localStorage.getItem(this.storageKey)?.length || 0,
                 storageKey: this.storageKey
             };
@@ -374,6 +464,9 @@ sqlDB.getDatabaseInfo()
 
 // Проверить всех пользователей
 sqlDB.getAllUsers().then(users => console.log('Пользователи:', users))
+
+// Проверить администратора
+sqlDB.getUserByUsername('admin').then(admin => console.log('Админ:', admin))
 
 // Проверить localStorage
 Object.keys(localStorage).forEach(key => console.log(key + ':', localStorage[key].length + ' chars'))

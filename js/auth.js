@@ -26,7 +26,7 @@ class AuthService {
                     department: 'IT',
                     created: new Date().toISOString(),
                     isActive: true,
-                    permissions: ['create_users', 'edit_users', 'delete_users', 'manage_tickets', 'view_reports']
+                    permissions: this.getAdminPermissions()
                 }
             ];
             localStorage.setItem('users', JSON.stringify(defaultUsers));
@@ -45,6 +45,13 @@ class AuthService {
                 
                 if (user && user.password === password && user.isActive === true) {
                     console.log('✅ Пароль и статус верны');
+                    
+                    // ПРОВЕРКА ЦЕЛОСТНОСТИ ПРАВ ПРИ ВХОДЕ
+                    if (!this.validateUserPermissions(user)) {
+                        console.warn('⚠️ Обнаружены проблемы с правами пользователя, исправляем...');
+                        await this.fixUserPermissions(user);
+                    }
+                    
                     this.currentUser = user;
                     localStorage.setItem('currentUser', JSON.stringify(user));
                     
@@ -128,6 +135,50 @@ class AuthService {
             return false;
         }
         return true;
+    }
+
+    // ДОБАВИТЬ: Проверка целостности прав пользователя
+    validateUserPermissions(user) {
+        if (!user || !user.role || !user.permissions) {
+            return false;
+        }
+        
+        const expectedPermissions = this.getPermissionsByRole(user.role);
+        const hasAllPermissions = expectedPermissions.every(perm => 
+            user.permissions.includes(perm)
+        );
+        
+        if (!hasAllPermissions) {
+            console.warn(`⚠️ У пользователя ${user.username} неполные права для роли ${user.role}`);
+            console.warn(`Ожидалось: ${expectedPermissions.join(', ')}`);
+            console.warn(`Фактически: ${user.permissions.join(', ')}`);
+            return false;
+        }
+        return true;
+    }
+
+    // ДОБАВИТЬ: Автоматическое исправление прав
+    async fixUserPermissions(user) {
+        try {
+            const correctPermissions = this.getPermissionsByRole(user.role);
+            console.log(`🔧 Исправление прав для ${user.username}:`, correctPermissions);
+            
+            if (window.sqlDB && window.sqlDB.db) {
+                await window.sqlDB.updateUser(user.id, {
+                    permissions: correctPermissions
+                });
+            }
+            
+            // Обновляем текущего пользователя если это он
+            if (this.currentUser && this.currentUser.id === user.id) {
+                this.currentUser.permissions = correctPermissions;
+                localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+            }
+            
+            console.log('✅ Права пользователя исправлены');
+        } catch (error) {
+            console.error('❌ Ошибка исправления прав:', error);
+        }
     }
 
     // User management methods
@@ -255,11 +306,25 @@ class AuthService {
 
     getPermissionsByRole(role) {
         const permissions = {
-            'admin': ['create_users', 'edit_users', 'delete_users', 'manage_tickets', 'view_reports'],
-            'manager': ['manage_tickets', 'view_reports'],
-            'user': ['create_tickets']
+            'admin': this.getAdminPermissions(),
+            'manager': [
+                'manage_tickets', 'view_reports', 'assign_tickets',
+                'edit_tickets', 'close_tickets'
+            ],
+            'user': [
+                'create_tickets', 'view_own_tickets', 'edit_own_tickets'
+            ]
         };
         return permissions[role] || permissions['user'];
+    }
+
+    // ДОБАВИТЬ: Отдельный метод для прав администратора
+    getAdminPermissions() {
+        return [
+            'create_users', 'edit_users', 'delete_users', 
+            'manage_tickets', 'view_reports', 'system_settings',
+            'export_data', 'manage_categories'
+        ];
     }
 }
 
@@ -312,3 +377,45 @@ if (window.location.pathname.includes('dashboard.html')) {
 console.log('🔧 AuthService инициализирован');
 console.log('👤 Текущий пользователь:', auth.currentUser);
 console.log('🔐 Доступные пользователи в localStorage:', JSON.parse(localStorage.getItem('users') || '[]'));
+
+// ДОБАВИТЬ: Административные команды для консоли
+window.adminTools = {
+    // Проверить целостность системы
+    checkSystemHealth: async function() {
+        const users = await window.sqlDB.getAllUsers();
+        console.log('🔍 Проверка целостности системы:');
+        users.forEach(user => {
+            const isValid = auth.validateUserPermissions(user);
+            console.log(`${isValid ? '✅' : '❌'} ${user.username} (${user.role}):`, 
+                        isValid ? 'OK' : 'НЕПОЛНЫЕ ПРАВА');
+        });
+    },
+    
+    // Восстановить права администратора
+    fixAdminRights: async function() {
+        const adminUser = await window.sqlDB.getUserByUsername('admin');
+        if (adminUser) {
+            await auth.fixUserPermissions(adminUser);
+            console.log('✅ Права администратора восстановлены');
+        } else {
+            console.log('❌ Администратор не найден');
+        }
+    },
+    
+    // Показать статистику прав
+    showPermissionsStats: async function() {
+        const users = await window.sqlDB.getAllUsers();
+        console.log('📊 Статистика прав:');
+        users.forEach(user => {
+            console.log(`- ${user.username} (${user.role}): ${user.permissions.length} прав`);
+        });
+    }
+};
+
+console.log(`
+🎮 АДМИНИСТРАТИВНЫЕ КОМАНДЫ:
+
+adminTools.checkSystemHealth() - проверить целостность
+adminTools.fixAdminRights()    - исправить права админа  
+adminTools.showPermissionsStats() - статистика прав
+`);
