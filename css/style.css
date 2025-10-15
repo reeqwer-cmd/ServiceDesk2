@@ -7,7 +7,7 @@
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: 1.6;
-    color: #161616;
+    color: #032319;
 }
 
 /* Navigation */
@@ -111,7 +111,7 @@ body {
     padding: 2rem;
     border-radius: 10px;
     text-align: center;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    box-shadow: 0 5px 15px #032319(0,0,0,0.1);
     transition: transform 0.3s;
 }
 
@@ -121,7 +121,7 @@ body {
 
 /* Login Page */
 .login-body {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg,  #3ec8c8 0%, #084634 80%);
     height: 100vh;
     display: flex;
     align-items: center;
@@ -166,7 +166,7 @@ body {
 .login-btn {
     width: 100%;
     padding: 12px;
-    background: #3498db;
+    background: #0e926b;
     color: white;
     border: none;
     border-radius: 5px;
@@ -176,7 +176,7 @@ body {
 }
 
 .login-btn:hover {
-    background: #2980b9;
+    background: #0e926b;
 }
 
 .error-message {
@@ -194,7 +194,7 @@ body {
 
 .sidebar {
     width: 250px;
-    background: #2c3e50;
+    background: #0e926b;
     color: white;
     position: fixed;
     height: 100vh;
@@ -221,13 +221,13 @@ body {
 
 .nav-item:hover,
 .nav-item.active {
-    background: #34495e;
-    border-left-color: #3498db;
+    background: #0b6b4d;
+    border-left-color: #032319;
 }
 
 .nav-item.logout {
-    color: #e74c3c;
-    margin-top: 2rem;
+    color: #032319;
+    margin-top: 4rem;
 }
 
 .main-content {
@@ -246,7 +246,7 @@ body {
 }
 
 .btn-primary {
-    background: #3498db;
+    background: #0e926b;
     color: white;
     padding: 10px 20px;
     border: none;
@@ -256,7 +256,7 @@ body {
 }
 
 .btn-primary:hover {
-    background: #2980b9;
+    background: #0e926b;
 }
 
 /* Tab Content */
@@ -288,7 +288,7 @@ body {
     margin-bottom: 1rem;
     border-radius: 5px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    border-left: 4px solid #3498db;
+    border-left: 4px solid #0e926b;
 }
 
 .ticket-item.high {
@@ -910,12 +910,12 @@ body {
 
 /* Стили для основных кнопок */
 .btn-primary {
-    background: #3498db !important;
+    background: #0e926b !important;
     color: white !important;
 }
 
 .btn-primary:hover {
-    background: #2980b9 !important;
+    background: #0e926b !important;
     transform: translateY(-2px) !important;
     box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3) !important;
 }
@@ -964,13 +964,13 @@ body {
 
 /* Кнопка входа */
 .login-btn {
-    background: #3498db !important;
+    background: #0e926b !important;
     color: white !important;
     width: 100% !important;
 }
 
 .login-btn:hover {
-    background: #2980b9 !important;
+    background: #0e926b !important;
     transform: translateY(-2px) !important;
     box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3) !important;
 }
